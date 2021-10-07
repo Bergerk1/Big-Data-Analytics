@@ -3,10 +3,7 @@ package de.ddm.actors.patterns;
 import akka.actor.typed.ActorRef;
 import akka.actor.typed.Behavior;
 import akka.actor.typed.Terminated;
-import akka.actor.typed.javadsl.AbstractBehavior;
-import akka.actor.typed.javadsl.ActorContext;
-import akka.actor.typed.javadsl.Behaviors;
-import akka.actor.typed.javadsl.Receive;
+import akka.actor.typed.javadsl.*;
 import akka.actor.typed.receptionist.Receptionist;
 import de.ddm.actors.Guardian;
 import de.ddm.configuration.SystemConfiguration;
@@ -62,11 +59,14 @@ public class Reaper extends AbstractBehavior<Reaper.Message> {
 	public static final String DEFAULT_NAME = "reaper";
 
 	public static Behavior<Message> create() {
-		return Behaviors.setup(Reaper::new);
+		return Behaviors.setup(
+				context -> Behaviors.withTimers(timers -> new Reaper(context, timers)));
 	}
 
-	private Reaper(ActorContext<Message> context) {
+	private Reaper(ActorContext<Message> context, TimerScheduler<Message> timers) {
 		super(context);
+
+		this.timers = timers;
 
 		ReaperSingleton.set(this.getContext().getSelf());
 
@@ -79,6 +79,8 @@ public class Reaper extends AbstractBehavior<Reaper.Message> {
 	/////////////////
 	// Actor State //
 	/////////////////
+
+	private final TimerScheduler<Message> timers;
 
 	private boolean isShutdown = false;
 
@@ -108,6 +110,7 @@ public class Reaper extends AbstractBehavior<Reaper.Message> {
 	}
 
 	private Behavior<Message> handle(EndTheWorldMessage message) {
+		this.timers.cancelAll();
 		this.getContext().getSystem().terminate();
 		return Behaviors.stopped();
 	}
@@ -144,9 +147,7 @@ public class Reaper extends AbstractBehavior<Reaper.Message> {
 		for (ActorRef<Guardian.Message> workerUserGuardian : this.workerUserGuardians)
 			workerUserGuardian.tell(new Guardian.ShutdownMessage());
 
-		return Behaviors.withTimers(timers -> {
-			timers.startTimerAtFixedRate(new EndTheWorldMessage(), Duration.ofSeconds(10), Duration.ofSeconds(5));
-			return Behaviors.same();
-		});
+		this.timers.startTimerAtFixedRate("EndTheWorld", new EndTheWorldMessage(), Duration.ofSeconds(10), Duration.ofSeconds(5));
+		return this;
 	}
 }

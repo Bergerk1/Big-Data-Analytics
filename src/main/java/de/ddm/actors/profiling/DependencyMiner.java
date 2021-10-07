@@ -9,6 +9,7 @@ import akka.actor.typed.javadsl.Behaviors;
 import akka.actor.typed.javadsl.Receive;
 import akka.actor.typed.receptionist.Receptionist;
 import akka.actor.typed.receptionist.ServiceKey;
+import de.ddm.actors.Guardian;
 import de.ddm.actors.patterns.LargeMessageProxy;
 import de.ddm.serialization.AkkaSerializable;
 import de.ddm.singletons.InputConfigurationSingleton;
@@ -136,13 +137,11 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 	}
 
 	private Behavior<Message> handle(HeaderMessage message) {
-		//this.getContext().getLog().info("Got the header line for file {}: {}", message.getId(), Arrays.toString(message.getHeader()));
 		this.headerLines[message.getId()] = message.getHeader();
 		return this;
 	}
 
 	private Behavior<Message> handle(BatchMessage message) {
-		//this.getContext().getLog().info("Got batch for file {} with {} records.", message.getId(), message.getBatch().size());
 		// Ignoring batch content for now ... but I could do so much with it.
 
 		if (message.getBatch().size() != 0)
