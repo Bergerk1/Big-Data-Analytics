@@ -16,19 +16,21 @@ public class SystemConfiguration {
 	public static final int DEFAULT_MASTER_PORT = 7877;
 	public static final int DEFAULT_WORKER_PORT = 7879;
 
-	private String role = MASTER_ROLE;                // This machine's role in the cluster.
+	private String role = MASTER_ROLE;                 // This machine's role in the cluster.
 
 	private String host = getDefaultHost();            // This machine's host name or IP that we use to bind this application against
 	private int port = DEFAULT_MASTER_PORT;            // This machines port that we use to bind this application against
 
-	private String masterHost = getDefaultHost();    // The host name or IP of the master; if this is a master, masterHost = host
-	private int masterPort = DEFAULT_MASTER_PORT;    // The port of the master; if this is a master, masterPort = port
+	private String masterHost = getDefaultHost();      // The host name or IP of the master; if this is a master, masterHost = host
+	private int masterPort = DEFAULT_MASTER_PORT;      // The port of the master; if this is a master, masterPort = port
 
 	private String actorSystemName = "ddm";            // The name of this application
 
 	private int numWorkers = 1;                        // The number of workers to start locally; should be at least one if the algorithm is started standalone (otherwise there are no workers to run the application)
 
-	private boolean startPaused = false;            // Wait for some console input to start; useful, if we want to wait manually until all ActorSystems in the cluster are started (e.g. to avoid work stealing effects in performance evaluations)
+	private boolean startPaused = false;               // Wait for some console input to start; useful, if we want to wait manually until all ActorSystems in the cluster are started (e.g. to avoid work stealing effects in performance evaluations)
+
+	private boolean hardMode = false;					// Solve the hard version of the task
 
 	private static String getDefaultHost() {
 		try {
@@ -46,6 +48,7 @@ public class SystemConfiguration {
 		this.masterPort = commandMaster.port;
 		this.numWorkers = commandMaster.numWorkers;
 		this.startPaused = commandMaster.startPaused;
+		this.hardMode = commandMaster.hardMode;
 	}
 
 	public void update(CommandWorker commandWorker) {

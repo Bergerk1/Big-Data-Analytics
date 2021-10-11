@@ -6,6 +6,7 @@ import akka.actor.typed.javadsl.AbstractBehavior;
 import akka.actor.typed.javadsl.ActorContext;
 import akka.actor.typed.javadsl.Behaviors;
 import akka.actor.typed.javadsl.Receive;
+import de.ddm.actors.Guardian;
 import de.ddm.serialization.AkkaSerializable;
 import de.ddm.singletons.DomainConfigurationSingleton;
 import de.ddm.structures.InclusionDependency;
@@ -34,6 +35,11 @@ public class ResultCollector extends AbstractBehavior<ResultCollector.Message> {
 	public static class ResultMessage implements Message {
 		private static final long serialVersionUID = -7070569202900845736L;
 		List<InclusionDependency> inclusionDependencies;
+	}
+
+	@NoArgsConstructor
+	public static class FinalizeMessage implements Message {
+		private static final long serialVersionUID = -6603856949941810321L;
 	}
 
 	////////////////////////
@@ -72,6 +78,7 @@ public class ResultCollector extends AbstractBehavior<ResultCollector.Message> {
 	public Receive<Message> createReceive() {
 		return newReceiveBuilder()
 				.onMessage(ResultMessage.class, this::handle)
+				.onMessage(FinalizeMessage.class, this::handle)
 				.onSignal(PostStop.class, this::handle)
 				.build();
 	}
@@ -87,8 +94,15 @@ public class ResultCollector extends AbstractBehavior<ResultCollector.Message> {
 		return this;
 	}
 
-	private Behavior<Message> handle(PostStop signal) throws IOException {
+	private Behavior<Message> handle(FinalizeMessage message) throws IOException {
+		this.getContext().getLog().info("Received FinalizeMessage!");
+
 		this.writer.flush();
+		this.getContext().getSystem().unsafeUpcast().tell(new Guardian.ShutdownMessage());
+		return this;
+	}
+
+	private Behavior<Message> handle(PostStop signal) throws IOException {
 		this.writer.close();
 		return this;
 	}
