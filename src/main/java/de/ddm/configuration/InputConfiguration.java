@@ -28,6 +28,7 @@ public class InputConfiguration {
 	private boolean valueIgnoreLeadingWhitespace = false;
 
 	public void update(CommandMaster commandMaster) {
+		this.inputPath = commandMaster.inputPath;
 		this.fileHasHeader = commandMaster.fileHasHeader;
 		this.charset = commandMaster.charset;
 		this.valueSeparator = commandMaster.attributeSeparator;
