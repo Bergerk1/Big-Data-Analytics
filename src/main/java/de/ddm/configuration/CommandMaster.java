@@ -21,6 +21,9 @@ public class CommandMaster extends Command {
 	@Parameter(names = {"-hm", "--hardMode"}, description = "Solve the hard version of the task", required = false, arity = 1)
 	boolean hardMode = SystemConfigurationSingleton.get().isHardMode();
 
+	@Parameter(names = {"-ip", "--inputPath"}, description = "Input path for the input data; all files in this folder are considered", required = false, arity = 1)
+	String inputPath = InputConfigurationSingleton.get().getInputPath();
+
 	@Parameter(names = {"-fh", "--fileHasHeader"}, description = "File has header as defined by the input data", required = false, arity = 1)
 	boolean fileHasHeader = InputConfigurationSingleton.get().isFileHasHeader();
 
