@@ -3,7 +3,7 @@ Akka example and homework code for the "Big Data Systems" lecture.
 
 ## Requirements
 - Java 9 >=
-- Maven 2.8.1 >=
+- Maven Compiler Version 3.1.8 >=
 
 ## Getting started
 1. Clone repo
