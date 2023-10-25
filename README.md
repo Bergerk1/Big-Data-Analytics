@@ -11,19 +11,19 @@ Akka example and homework code for the "Big Data Systems" lecture.
   git clone https://github.com/UMR-Big-Data-Analytics/ddm-akka.git
   ```
         
-3. Decompress test data
+2. Decompress test data
   ```
   cd ddm-akka/data
   unzip TPCH.zip
   ```
 
-4. Build project with maven
+3. Build project with maven
   ```
   cd ..
   mvn package
   ```
 
-5. First run
+4. First run
   ```
   java -jar target/ddm-akka-1.0.jar master
   ```
