@@ -35,6 +35,7 @@ public class ResultCollector extends AbstractBehavior<ResultCollector.Message> {
 	public static class ResultMessage implements Message {
 		private static final long serialVersionUID = -7070569202900845736L;
 		List<InclusionDependency> inclusionDependencies;
+		boolean result;
 	}
 
 	@NoArgsConstructor
@@ -69,6 +70,7 @@ public class ResultCollector extends AbstractBehavior<ResultCollector.Message> {
 	/////////////////
 
 	private final BufferedWriter writer;
+	private int countINDs = 0;
 
 	////////////////////
 	// Actor Behavior //
@@ -84,18 +86,20 @@ public class ResultCollector extends AbstractBehavior<ResultCollector.Message> {
 	}
 
 	private Behavior<Message> handle(ResultMessage message) throws IOException {
-		this.getContext().getLog().info("Received {} INDs!", message.getInclusionDependencies().size());
-
-		for (InclusionDependency ind : message.getInclusionDependencies()) {
-			this.writer.write(ind.toString());
-			this.writer.newLine();
+		if(message.result){
+			countINDs += 1;
+			for (InclusionDependency ind : message.getInclusionDependencies()) {
+				this.getContext().getLog().info("Received an IND! {}", ind.toString());
+				this.writer.write(ind.toString());
+				this.writer.newLine();
+			}
 		}
 
 		return this;
 	}
 
 	private Behavior<Message> handle(FinalizeMessage message) throws IOException {
-		this.getContext().getLog().info("Received FinalizeMessage!");
+		this.getContext().getLog().info("Received FinalizeMessage! I collected " + countINDs + " INDs!");
 
 		this.writer.flush();
 		this.getContext().getSystem().unsafeUpcast().tell(new Guardian.ShutdownMessage());

@@ -25,5 +25,5 @@ Akka example and homework code for the "Big Data Systems" lecture.
 
 4. First run
   ```
-  java -jar target/ddm-akka-1.0.jar master
+  java -jar -Xms256m -Xmx4096m target/ddm-akka-1.0.jar master
   ```

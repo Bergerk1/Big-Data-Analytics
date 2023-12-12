@@ -14,12 +14,15 @@ import de.ddm.serialization.AkkaSerializable;
 import de.ddm.singletons.InputConfigurationSingleton;
 import de.ddm.singletons.SystemConfigurationSingleton;
 import de.ddm.structures.InclusionDependency;
+import de.ddm.structures.Task;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import javax.sound.midi.Soundbank;
 import java.io.File;
 import java.lang.reflect.Array;
+import java.sql.SQLOutput;
 import java.util.*;
 
 public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
@@ -68,7 +71,9 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 	public static class CompletionMessage implements Message {
 		private static final long serialVersionUID = -7642425159675583598L;
 		ActorRef<DependencyWorker.Message> dependencyWorker;
-		int result;
+		String referencedAttribute;
+		String dependentAttribute;
+		boolean result;
 	}
 
 	////////////////////////
@@ -88,6 +93,8 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 		this.discoverNaryDependencies = SystemConfigurationSingleton.get().isHardMode();
 		this.inputFiles = InputConfigurationSingleton.get().getInputFiles();
 		this.headerLines = new String[this.inputFiles.length][];
+		this.filesRead = new boolean[this.inputFiles.length];
+		this.headersRead = new boolean[this.inputFiles.length];
 
 		this.inputReaders = new ArrayList<>(inputFiles.length);
 		for (int id = 0; id < this.inputFiles.length; id++)
@@ -109,11 +116,15 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 	private final boolean discoverNaryDependencies;
 	private final File[] inputFiles;
 	private final String[][] headerLines;
-	private HashMap<String, ArrayList<String>> columnMap = new HashMap<>();
+	private final HashMap<String, Set<String>> columnMap = new HashMap<>();
+	private final boolean[] filesRead;
+	private final boolean[] headersRead;
 	private final List<ActorRef<InputReader.Message>> inputReaders;
 	private final ActorRef<ResultCollector.Message> resultCollector;
 	private final ActorRef<LargeMessageProxy.Message> largeMessageProxy;
-
+	private Stack<Task> tasks;
+	private int totalTasks;
+	private int currResults = 0;
 	private final List<ActorRef<DependencyWorker.Message>> dependencyWorkers;
 
 	////////////////////
@@ -143,6 +154,8 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 
 	private Behavior<Message> handle(HeaderMessage message) {
 		this.headerLines[message.getId()] = message.getHeader();
+		this.headersRead[message.getId()] = true;
+		this.advanceIfReady();
 		return this;
 	}
 
@@ -152,26 +165,17 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 			int id = message.getId();
 			String filename = inputFiles[id].toString();
 			for (int column = 0; column < Array.getLength(headerLines[id]); column++){
-				String key = filename + "_" + headerLines[id][column];
+				String key = filename.substring(15) + "_" + headerLines[id][column];
 				if(!columnMap.containsKey(key))
-					columnMap.put(key,new ArrayList<>());
-
+					columnMap.put(key,new HashSet<>());
 				for (int row = 0; row < message.getBatch().size() ; row++) {
 					columnMap.get(key).add(message.getBatch().get(row)[column]);
 				}
 			}
-
-
-			/*
-
-			int id = message.getId();
-			if(map.containsKey(id)){
-				map.get(id).addAll(message.getBatch());
-			}else{
-				map.put(id, message.getBatch());
-			}*/
-
 			this.inputReaders.get(message.getId()).tell(new InputReader.ReadBatchMessage(this.getContext().getSelf()));
+		}else{
+			this.filesRead[message.getId()] =true;
+			this.advanceIfReady();
 		}
 		return this;
 	}
@@ -184,7 +188,10 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 			// The worker should get some work ... let me send her something before I figure out what I actually want from her.
 			// I probably need to idle the worker for a while, if I do not have work for it right now ... (see master/worker pattern)
 
-			dependencyWorker.tell(new DependencyWorker.TaskMessage(this.largeMessageProxy, 42));
+			if(readyCheck()) {
+				Task task = tasks.pop();
+				dependencyWorker.tell(new DependencyWorker.TaskMessage(this.largeMessageProxy, task,columnMap.get(task.getDependentAttribute()),columnMap.get(task.getReferencedAttribute()))); // send Task from tasklist. What i
+			}
 		}
 		return this;
 	}
@@ -192,8 +199,9 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 	private Behavior<Message> handle(CompletionMessage message) {
 		ActorRef<DependencyWorker.Message> dependencyWorker = message.getDependencyWorker();
 		// If this was a reasonable result, I would probably do something with it and potentially generate more work ... for now, let's just generate a random, binary IND.
-
+		currResults += 1;
 		if (this.headerLines[0] != null) {
+
 			Random random = new Random();
 			int dependent = random.nextInt(this.inputFiles.length);
 			int referenced = random.nextInt(this.inputFiles.length);
@@ -201,27 +209,63 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 			File referencedFile = this.inputFiles[referenced];
 			String[] dependentAttributes = {this.headerLines[dependent][random.nextInt(this.headerLines[dependent].length)], this.headerLines[dependent][random.nextInt(this.headerLines[dependent].length)]};
 			String[] referencedAttributes = {this.headerLines[referenced][random.nextInt(this.headerLines[referenced].length)], this.headerLines[referenced][random.nextInt(this.headerLines[referenced].length)]};
-			InclusionDependency ind = new InclusionDependency(dependentFile, dependentAttributes, referencedFile, referencedAttributes);
+
+
 			List<InclusionDependency> inds = new ArrayList<>(1);
-			inds.add(ind);
+			inds.add(new InclusionDependency(new File(message.dependentAttribute),new String[] {message.dependentAttribute} , new File(message.referencedAttribute),new String[] {message.referencedAttribute} ));
 
-			Set<String> keys = columnMap.keySet();
-			for (String key : keys) {
-				System.out.println(key + " " + columnMap.get(key).size());
-			}
-
-
-			this.resultCollector.tell(new ResultCollector.ResultMessage(inds));
+			//System.out.println(message.getDependencyWorker() + ": " +  message.result);
+			this.resultCollector.tell(new ResultCollector.ResultMessage(inds, message.result));
 		}
 		// I still don't know what task the worker could help me to solve ... but let me keep her busy.
 		// Once I found all unary INDs, I could check if this.discoverNaryDependencies is set to true and try to detect n-ary INDs as well!
-
-		dependencyWorker.tell(new DependencyWorker.TaskMessage(this.largeMessageProxy, 42));
-
-		// At some point, I am done with the discovery. That is when I should call my end method. Because I do not work on a completable task yet, I simply call it after some time.
-		if (System.currentTimeMillis() - this.startTime > 2000000)
-			this.end();
+		if(!tasks.empty()){
+			Task task = tasks.pop();
+			dependencyWorker.tell(new DependencyWorker.TaskMessage(this.largeMessageProxy, task,columnMap.get(task.getDependentAttribute()),columnMap.get(task.getReferencedAttribute()))); // send Task from tasklist. What i
+		}else{
+			if(totalTasks == currResults){
+				this.end();
+			}
+		}
 		return this;
+	}
+	private boolean readyCheck(){
+		for(boolean b : this.filesRead)
+			if(!b) return false;
+		for(boolean b : this.headersRead)
+			if(!b) return false;
+		return true;
+	}
+
+	private void advanceIfReady(){
+		if(this.readyCheck()){
+			long dataReadingTime = System.currentTimeMillis() - this.startTime;
+			this.getContext().getLog().info("Finished reading data within {} ms!", dataReadingTime);
+			Set<String> keys = columnMap.keySet();
+			for (String key : keys) {
+				System.out.println("Column: "+ key + " with " + columnMap.get(key).size() + " unique entries.");
+			}
+
+			tasks = createINDs(keys);
+			totalTasks = tasks.size();
+
+			for(ActorRef<DependencyWorker.Message> dependencyWorker : this.dependencyWorkers){
+				Task task = tasks.pop();
+				dependencyWorker.tell(new DependencyWorker.TaskMessage(this.largeMessageProxy, task,columnMap.get(task.getDependentAttribute()),columnMap.get(task.getReferencedAttribute()))); // send Task from tasklist. What if task fails?
+			}
+		}
+	}
+
+	private Stack<Task> createINDs(Set<String> keys){
+		Stack<Task> resultingINDs = new Stack<>();
+		for(String key1: keys){
+			for(String key2: keys){
+				if(!key1.equals(key2)){
+					resultingINDs.push(new Task(key1, key2));
+				}
+			}
+		}
+		return resultingINDs;
 	}
 
 	private void end() {
