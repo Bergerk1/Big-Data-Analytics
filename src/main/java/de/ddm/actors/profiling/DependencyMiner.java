@@ -19,9 +19,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.io.File;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
+import java.lang.reflect.Array;
+import java.util.*;
 
 public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 
@@ -110,7 +109,7 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 	private final boolean discoverNaryDependencies;
 	private final File[] inputFiles;
 	private final String[][] headerLines;
-
+	private HashMap<String, ArrayList<String>> columnMap = new HashMap<>();
 	private final List<ActorRef<InputReader.Message>> inputReaders;
 	private final ActorRef<ResultCollector.Message> resultCollector;
 	private final ActorRef<LargeMessageProxy.Message> largeMessageProxy;
@@ -149,9 +148,31 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 
 	private Behavior<Message> handle(BatchMessage message) {
 		// Ignoring batch content for now ... but I could do so much with it.
+		if (message.getBatch().size() != 0){
+			int id = message.getId();
+			String filename = inputFiles[id].toString();
+			for (int column = 0; column < Array.getLength(headerLines[id]); column++){
+				String key = filename + "_" + headerLines[id][column];
+				if(!columnMap.containsKey(key))
+					columnMap.put(key,new ArrayList<>());
 
-		if (message.getBatch().size() != 0)
+				for (int row = 0; row < message.getBatch().size() ; row++) {
+					columnMap.get(key).add(message.getBatch().get(row)[column]);
+				}
+			}
+
+
+			/*
+
+			int id = message.getId();
+			if(map.containsKey(id)){
+				map.get(id).addAll(message.getBatch());
+			}else{
+				map.put(id, message.getBatch());
+			}*/
+
 			this.inputReaders.get(message.getId()).tell(new InputReader.ReadBatchMessage(this.getContext().getSelf()));
+		}
 		return this;
 	}
 
@@ -183,6 +204,12 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 			InclusionDependency ind = new InclusionDependency(dependentFile, dependentAttributes, referencedFile, referencedAttributes);
 			List<InclusionDependency> inds = new ArrayList<>(1);
 			inds.add(ind);
+
+			Set<String> keys = columnMap.keySet();
+			for (String key : keys) {
+				System.out.println(key + " " + columnMap.get(key).size());
+			}
+
 
 			this.resultCollector.tell(new ResultCollector.ResultMessage(inds));
 		}
