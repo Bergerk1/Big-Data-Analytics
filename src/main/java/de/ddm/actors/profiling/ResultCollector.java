@@ -86,13 +86,11 @@ public class ResultCollector extends AbstractBehavior<ResultCollector.Message> {
 	}
 
 	private Behavior<Message> handle(ResultMessage message) throws IOException {
-		if(message.result){
-			countINDs += 1;
-			for (InclusionDependency ind : message.getInclusionDependencies()) {
-				this.getContext().getLog().info("Received an IND! {}", ind.toString());
-				this.writer.write(ind.toString());
-				this.writer.newLine();
-			}
+		countINDs += 1;
+		for (InclusionDependency ind : message.getInclusionDependencies()) {
+			this.getContext().getLog().info("Received an IND! {}", ind.toString());
+			this.writer.write(ind.toString());
+			this.writer.newLine();
 		}
 
 		return this;
