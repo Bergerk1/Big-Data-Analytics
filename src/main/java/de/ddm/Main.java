@@ -18,14 +18,11 @@ public class Main {
 		final ActorSystem<Guardian.Message> guardian = ActorSystem.create(Guardian.create(), config.getActorSystemName(), config.toAkkaConfig());
 
 		if (config.getRole().equals(SystemConfiguration.MASTER_ROLE)) {
-			if (config.isStartPaused())
-				waitForInput(">>> Press ENTER to start <<<");
+
 
 			guardian.tell(new Guardian.StartMessage());
 
-			waitForInput(">>> Press ENTER to exit <<<");
-
-			guardian.tell(new Guardian.ShutdownMessage());
+			//guardian.tell(new Guardian.ShutdownMessage());
 		}
 	}
 

@@ -19,10 +19,8 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-import javax.sound.midi.Soundbank;
 import java.io.File;
 import java.lang.reflect.Array;
-import java.sql.SQLOutput;
 import java.util.*;
 
 public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
@@ -123,8 +121,10 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 	private final ActorRef<ResultCollector.Message> resultCollector;
 	private final ActorRef<LargeMessageProxy.Message> largeMessageProxy;
 	private Stack<Task> tasks;
+	private Map<ActorRef<DependencyWorker.Message>, Task> currentTasks = new HashMap<ActorRef<DependencyWorker.Message>, Task>();
 	private int totalTasks;
 	private int currResults = 0;
+	private long dataReadingTime;
 	private final List<ActorRef<DependencyWorker.Message>> dependencyWorkers;
 
 	////////////////////
@@ -189,44 +189,49 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 			// I probably need to idle the worker for a while, if I do not have work for it right now ... (see master/worker pattern)
 
 			if(readyCheck()) {
-				Task task = tasks.pop();
-				dependencyWorker.tell(new DependencyWorker.TaskMessage(this.largeMessageProxy, task,columnMap.get(task.getDependentAttribute()),columnMap.get(task.getReferencedAttribute()))); // send Task from tasklist. What i
-			}
+                while (!tasks.empty()) {
+                     Task task = tasks.pop();
+                    if (task.getNumUniqueDependent() > task.getNumUniqueReferenced()) {
+                        currResults += 1;
+                    } else {
+                        dependencyWorker.tell(new DependencyWorker.TaskMessage(this.largeMessageProxy, task, columnMap.get(task.getDependentAttribute()), columnMap.get(task.getReferencedAttribute()))); // send Task from tasklist. What if task fails?
+                        currentTasks.put(dependencyWorker,task);
+                        break;
+                    }
+                }
+            }
 		}
 		return this;
 	}
 
 	private Behavior<Message> handle(CompletionMessage message) {
 		ActorRef<DependencyWorker.Message> dependencyWorker = message.getDependencyWorker();
-		// If this was a reasonable result, I would probably do something with it and potentially generate more work ... for now, let's just generate a random, binary IND.
 		currResults += 1;
 		if (this.headerLines[0] != null) {
 
-			Random random = new Random();
-			int dependent = random.nextInt(this.inputFiles.length);
-			int referenced = random.nextInt(this.inputFiles.length);
-			File dependentFile = this.inputFiles[dependent];
-			File referencedFile = this.inputFiles[referenced];
-			String[] dependentAttributes = {this.headerLines[dependent][random.nextInt(this.headerLines[dependent].length)], this.headerLines[dependent][random.nextInt(this.headerLines[dependent].length)]};
-			String[] referencedAttributes = {this.headerLines[referenced][random.nextInt(this.headerLines[referenced].length)], this.headerLines[referenced][random.nextInt(this.headerLines[referenced].length)]};
-
 
 			List<InclusionDependency> inds = new ArrayList<>(1);
-			inds.add(new InclusionDependency(new File(message.dependentAttribute),new String[] {message.dependentAttribute} , new File(message.referencedAttribute),new String[] {message.referencedAttribute} ));
+			inds.add(new InclusionDependency(new File(message.dependentAttribute),new String[] {message.dependentAttribute.substring(message.dependentAttribute.indexOf(".")+5)} , new File(message.referencedAttribute),new String[] {message.referencedAttribute.substring(message.referencedAttribute.indexOf(".")+5)} ));
 
 			//System.out.println(message.getDependencyWorker() + ": " +  message.result);
 			this.resultCollector.tell(new ResultCollector.ResultMessage(inds, message.result));
 		}
 		// I still don't know what task the worker could help me to solve ... but let me keep her busy.
 		// Once I found all unary INDs, I could check if this.discoverNaryDependencies is set to true and try to detect n-ary INDs as well!
-		if(!tasks.empty()){
-			Task task = tasks.pop();
-			dependencyWorker.tell(new DependencyWorker.TaskMessage(this.largeMessageProxy, task,columnMap.get(task.getDependentAttribute()),columnMap.get(task.getReferencedAttribute()))); // send Task from tasklist. What i
-		}else{
-			if(totalTasks == currResults){
-				this.end();
-			}
-		}
+
+        while(!tasks.empty()){
+            Task task = tasks.pop();
+            if(task.getNumUniqueDependent()> task.getNumUniqueReferenced()){
+                currResults += 1;
+            }else{
+                dependencyWorker.tell(new DependencyWorker.TaskMessage(this.largeMessageProxy, task,columnMap.get(task.getDependentAttribute()),columnMap.get(task.getReferencedAttribute()))); // send Task from tasklist. What if task fails?
+                currentTasks.put(dependencyWorker,task);
+                break;
+            }
+        }
+        if(totalTasks == currResults){
+            this.end();
+        }
 		return this;
 	}
 	private boolean readyCheck(){
@@ -239,7 +244,7 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 
 	private void advanceIfReady(){
 		if(this.readyCheck()){
-			long dataReadingTime = System.currentTimeMillis() - this.startTime;
+			dataReadingTime = System.currentTimeMillis() - this.startTime;
 			this.getContext().getLog().info("Finished reading data within {} ms!", dataReadingTime);
 			Set<String> keys = columnMap.keySet();
 			for (String key : keys) {
@@ -249,9 +254,18 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 			tasks = createINDs(keys);
 			totalTasks = tasks.size();
 
+
 			for(ActorRef<DependencyWorker.Message> dependencyWorker : this.dependencyWorkers){
-				Task task = tasks.pop();
-				dependencyWorker.tell(new DependencyWorker.TaskMessage(this.largeMessageProxy, task,columnMap.get(task.getDependentAttribute()),columnMap.get(task.getReferencedAttribute()))); // send Task from tasklist. What if task fails?
+			    while(!tasks.empty()){
+                    Task task = tasks.pop();
+                    if(task.getNumUniqueDependent()> task.getNumUniqueReferenced()){
+                        currResults += 1;
+                    }else{
+                        dependencyWorker.tell(new DependencyWorker.TaskMessage(this.largeMessageProxy, task,columnMap.get(task.getDependentAttribute()),columnMap.get(task.getReferencedAttribute()))); // send Task from tasklist. What if task fails?
+                        currentTasks.put(dependencyWorker,task);
+                        break;
+                    }
+                }
 			}
 		}
 	}
@@ -261,7 +275,7 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 		for(String key1: keys){
 			for(String key2: keys){
 				if(!key1.equals(key2)){
-					resultingINDs.push(new Task(key1, key2));
+					resultingINDs.push(new Task(key1, key2, columnMap.get(key1).size(), columnMap.get(key2).size()));
 				}
 			}
 		}
@@ -271,11 +285,12 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 	private void end() {
 		this.resultCollector.tell(new ResultCollector.FinalizeMessage());
 		long discoveryTime = System.currentTimeMillis() - this.startTime;
-		this.getContext().getLog().info("Finished mining within {} ms!", discoveryTime);
+		this.getContext().getLog().info("Finished mining within {} ms! It took {} ms to read the Data and {} ms to mine.", discoveryTime, dataReadingTime, (discoveryTime- dataReadingTime));
 	}
 
 	private Behavior<Message> handle(Terminated signal) {
 		ActorRef<DependencyWorker.Message> dependencyWorker = signal.getRef().unsafeUpcast();
+		tasks.push(currentTasks.get(dependencyWorker)); //put task of dead Worker back to list
 		this.dependencyWorkers.remove(dependencyWorker);
 		return this;
 	}

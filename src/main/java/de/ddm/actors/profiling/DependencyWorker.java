@@ -90,8 +90,6 @@ public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message>
 	}
 
 	private Behavior<Message> handle(TaskMessage message) {
-		//this.getContext().getLog().info("Got two columns to check: " + message.task.getReferencedAttribute() + " and " + message.task.getDependentAttribute());
-		// I should probably know how to solve this task, but for now I just pretend some work...
 
 		if(message.dependentColumn.size()> message.referencedColumn.size()){
 			LargeMessageProxy.LargeMessage completionMessage = new DependencyMiner.CompletionMessage(this.getContext().getSelf(), message.task.getReferencedAttribute(), message.task.getDependentAttribute(), false);
