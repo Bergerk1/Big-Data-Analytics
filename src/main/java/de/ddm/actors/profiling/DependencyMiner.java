@@ -163,6 +163,7 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 		// Ignoring batch content for now ... but I could do so much with it.
 		if (message.getBatch().size() != 0){
 			int id = message.getId();
+			System.out.println("Got Batch of File : " + inputFiles[id].toString());
 			String filename = inputFiles[id].toString();
 			for (int column = 0; column < Array.getLength(headerLines[id]); column++){
 				String key = filename.substring(10) + "_" + headerLines[id][column];
@@ -201,7 +202,6 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 			inds.add(new InclusionDependency(new File(message.dependentAttribute),new String[] {message.dependentAttribute.substring(message.dependentAttribute.indexOf(".")+5)} , new File(message.referencedAttribute),new String[] {message.referencedAttribute.substring(message.referencedAttribute.indexOf(".")+5)} ));
 			this.resultCollector.tell(new ResultCollector.ResultMessage(inds, message.result));
 		}
-
 		sendNextTask(dependencyWorker);
 		if (tasksDone == totalTasks)
 			this.end(); // Once I found all unary INDs, I could check if this.discoverNaryDependencies is set to true and try to detect n-ary INDs as well!
