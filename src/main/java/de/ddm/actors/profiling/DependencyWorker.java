@@ -23,7 +23,7 @@ public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message>
 	// Actor Messages //
 	////////////////////
 
-	public interface Message extends AkkaSerializable {
+	public interface Message extends AkkaSerializable , LargeMessageProxy.LargeMessage {
 	}
 
 	@Getter
@@ -37,7 +37,7 @@ public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message>
 	@Getter
 	@NoArgsConstructor
 	@AllArgsConstructor
-	public static class TaskMessage implements Message, LargeMessageProxy.Message {
+	public static class TaskMessage implements Message {
 		private static final long serialVersionUID = -4667745204456518160L;
 		ActorRef<LargeMessageProxy.Message> dependencyMinerLargeMessageProxy;
 		Task task;
@@ -95,11 +95,7 @@ public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message>
 
 	private Behavior<Message> handle(TaskMessage message) {
 
-		if(message.dependentColumn.size()> message.referencedColumn.size()){
-			LargeMessageProxy.LargeMessage completionMessage = new DependencyMiner.CompletionMessage(this.getContext().getSelf(), message.task.getReferencedAttribute(), message.task.getDependentAttribute(), false);
-			this.largeMessageProxy.tell(new LargeMessageProxy.SendMessage(completionMessage, message.getDependencyMinerLargeMessageProxy()));
-			return this;
-		}
+		this.getContext().getLog().info("Received a Task! Checking {} c {}", message.task.getDependentAttribute(), message.task.getReferencedAttribute());
 		for(String c1 : message.dependentColumn){
 			if(!message.referencedColumn.contains(c1)){
 				LargeMessageProxy.LargeMessage completionMessage = new DependencyMiner.CompletionMessage(this.getContext().getSelf(), message.task.getReferencedAttribute(), message.task.getDependentAttribute(), false);

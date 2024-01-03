@@ -18,7 +18,6 @@ import de.ddm.structures.Task;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-
 import java.io.File;
 import java.lang.reflect.Array;
 import java.util.*;
@@ -61,7 +60,7 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 	public static class RegistrationMessage implements Message {
 		private static final long serialVersionUID = -4025238529984914107L;
 		ActorRef<DependencyWorker.Message> dependencyWorker;
-		ActorRef<LargeMessageProxy.Message> workerLMP;
+		private ActorRef<LargeMessageProxy.Message> workerLMP;
 	}
 
 	@Getter
@@ -111,7 +110,7 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 	/////////////////
 
 	private long startTime;
-	private final HashMap<ActorRef<DependencyWorker.Message>,ActorRef<LargeMessageProxy.Message>> workerLMP = new HashMap<>();
+	private final HashMap<ActorRef<DependencyWorker.Message>,ActorRef<LargeMessageProxy.Message>> workerLMPs = new HashMap<>();
 	private final boolean discoverNaryDependencies;
 	private final File[] inputFiles;
 	private final String[][] headerLines;
@@ -187,7 +186,7 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 		if (!this.dependencyWorkers.contains(dependencyWorker)) {
 			this.dependencyWorkers.add(dependencyWorker);
 			this.getContext().watch(dependencyWorker);
-			workerLMP.put(message.getDependencyWorker(),message.workerLMP);
+			workerLMPs.put(message.getDependencyWorker(), message.getWorkerLMP());
 			if(readyCheck())
 				sendNextTask(dependencyWorker);
 				if(tasksDone == totalTasks) end();
@@ -209,6 +208,7 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 
 		return this;
 	}
+
 	private boolean readyCheck(){
 		for(boolean b : this.filesRead)
 			if(!b) return false;
@@ -242,11 +242,14 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 			if(task.getNumUniqueDependent()> task.getNumUniqueReferenced()){
 				tasksDone += 1;
 			}else{
-				LargeMessageProxy.Message taskMessage = new DependencyWorker.TaskMessage(this.largeMessageProxy, task,columnMap.get(task.getDependentAttribute()),columnMap.get(task.getReferencedAttribute()));
-				workerLMP.get(dependencyWorker).tell(taskMessage);
+				LargeMessageProxy.LargeMessage taskMessage = new DependencyWorker.TaskMessage(this.largeMessageProxy, task,columnMap.get(task.getDependentAttribute()),columnMap.get(task.getReferencedAttribute()));
+				this.largeMessageProxy.tell(new LargeMessageProxy.SendMessage(taskMessage, workerLMPs.get(dependencyWorker)));
+
+
+				//   workerLMP.get(dependencyWorker).tell(taskMessage);
 				/*using large message proxy: look at large message proxy test!
 
-				create both large message proxies. if sender wants to send large message
+				get both large message proxies. if sender wants to send large message
 				send message to own large message proxy with taskmessage
 				specifiy large message proxy of receiver process.
 				sender tells own proxy,: lmp.sendmessage(message, and receiver)
