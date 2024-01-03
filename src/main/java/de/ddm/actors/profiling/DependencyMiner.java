@@ -61,6 +61,7 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 	public static class RegistrationMessage implements Message {
 		private static final long serialVersionUID = -4025238529984914107L;
 		ActorRef<DependencyWorker.Message> dependencyWorker;
+		ActorRef<LargeMessageProxy.Message> workerLMP;
 	}
 
 	@Getter
@@ -110,7 +111,7 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 	/////////////////
 
 	private long startTime;
-
+	private final HashMap<ActorRef<DependencyWorker.Message>,ActorRef<LargeMessageProxy.Message>> workerLMP = new HashMap<>();
 	private final boolean discoverNaryDependencies;
 	private final File[] inputFiles;
 	private final String[][] headerLines;
@@ -186,7 +187,7 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 		if (!this.dependencyWorkers.contains(dependencyWorker)) {
 			this.dependencyWorkers.add(dependencyWorker);
 			this.getContext().watch(dependencyWorker);
-
+			workerLMP.put(message.getDependencyWorker(),message.workerLMP);
 			if(readyCheck())
 				sendNextTask(dependencyWorker);
 				if(tasksDone == totalTasks) end();
@@ -241,7 +242,16 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 			if(task.getNumUniqueDependent()> task.getNumUniqueReferenced()){
 				tasksDone += 1;
 			}else{
-				dependencyWorker.tell(new DependencyWorker.TaskMessage(this.largeMessageProxy, task,columnMap.get(task.getDependentAttribute()),columnMap.get(task.getReferencedAttribute()))); // send Task from tasklist. What if task fails?
+				LargeMessageProxy.Message taskMessage = new DependencyWorker.TaskMessage(this.largeMessageProxy, task,columnMap.get(task.getDependentAttribute()),columnMap.get(task.getReferencedAttribute()));
+				workerLMP.get(dependencyWorker).tell(taskMessage);
+				/*using large message proxy: look at large message proxy test!
+
+				create both large message proxies. if sender wants to send large message
+				send message to own large message proxy with taskmessage
+				specifiy large message proxy of receiver process.
+				sender tells own proxy,: lmp.sendmessage(message, and receiver)
+				will send it to receiver, which will forwarded it to the parent.
+				*/
 				currentTasks.put(dependencyWorker,task);
 				break;
 			}
@@ -257,6 +267,7 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 				}
 			}
 		}
+		System.out.println("Got " + resultingINDs.size()+ " tasks.");
 		return resultingINDs;
 	}
 

@@ -37,12 +37,16 @@ public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message>
 	@Getter
 	@NoArgsConstructor
 	@AllArgsConstructor
-	public static class TaskMessage implements Message {
+	public static class TaskMessage implements Message, LargeMessageProxy.Message {
 		private static final long serialVersionUID = -4667745204456518160L;
 		ActorRef<LargeMessageProxy.Message> dependencyMinerLargeMessageProxy;
 		Task task;
 		Set<String> dependentColumn;
 		Set<String> referencedColumn;
+	}
+
+	public ActorRef<LargeMessageProxy.Message> getLargeMessageProxy(){
+		return this.largeMessageProxy;
 	}
 
 	////////////////////////
@@ -85,7 +89,7 @@ public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message>
 	private Behavior<Message> handle(ReceptionistListingMessage message) {
 		Set<ActorRef<DependencyMiner.Message>> dependencyMiners = message.getListing().getServiceInstances(DependencyMiner.dependencyMinerService);
 		for (ActorRef<DependencyMiner.Message> dependencyMiner : dependencyMiners)
-			dependencyMiner.tell(new DependencyMiner.RegistrationMessage(this.getContext().getSelf()));
+			dependencyMiner.tell(new DependencyMiner.RegistrationMessage(this.getContext().getSelf(), this.largeMessageProxy));
 		return this;
 	}
 
