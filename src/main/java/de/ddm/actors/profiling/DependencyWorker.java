@@ -9,11 +9,12 @@ import akka.actor.typed.javadsl.Receive;
 import akka.actor.typed.receptionist.Receptionist;
 import de.ddm.actors.patterns.LargeMessageProxy;
 import de.ddm.serialization.AkkaSerializable;
+import de.ddm.structures.InclusionDependency;
+import de.ddm.structures.Task;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-import java.util.Random;
 import java.util.Set;
 
 public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message> {
@@ -22,7 +23,7 @@ public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message>
 	// Actor Messages //
 	////////////////////
 
-	public interface Message extends AkkaSerializable {
+	public interface Message extends AkkaSerializable , LargeMessageProxy.LargeMessage {
 	}
 
 	@Getter
@@ -39,7 +40,13 @@ public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message>
 	public static class TaskMessage implements Message {
 		private static final long serialVersionUID = -4667745204456518160L;
 		ActorRef<LargeMessageProxy.Message> dependencyMinerLargeMessageProxy;
-		int task;
+		Task task;
+		Set<String> dependentColumn;
+		Set<String> referencedColumn;
+	}
+
+	public ActorRef<LargeMessageProxy.Message> getLargeMessageProxy(){
+		return this.largeMessageProxy;
 	}
 
 	////////////////////////
@@ -82,24 +89,22 @@ public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message>
 	private Behavior<Message> handle(ReceptionistListingMessage message) {
 		Set<ActorRef<DependencyMiner.Message>> dependencyMiners = message.getListing().getServiceInstances(DependencyMiner.dependencyMinerService);
 		for (ActorRef<DependencyMiner.Message> dependencyMiner : dependencyMiners)
-			dependencyMiner.tell(new DependencyMiner.RegistrationMessage(this.getContext().getSelf()));
+			dependencyMiner.tell(new DependencyMiner.RegistrationMessage(this.getContext().getSelf(), this.largeMessageProxy));
 		return this;
 	}
 
 	private Behavior<Message> handle(TaskMessage message) {
-		this.getContext().getLog().info("Working!");
-		// I should probably know how to solve this task, but for now I just pretend some work...
 
-		int result = message.getTask();
-		long time = System.currentTimeMillis();
-		Random rand = new Random();
-		int runtime = (rand.nextInt(2) + 2) * 1000;
-		while (System.currentTimeMillis() - time < runtime)
-			result = ((int) Math.abs(Math.sqrt(result)) * result) % 1334525;
-
-		LargeMessageProxy.LargeMessage completionMessage = new DependencyMiner.CompletionMessage(this.getContext().getSelf(), result);
+		this.getContext().getLog().info("Received a Task! Checking {} c {}", message.task.getDependentAttribute(), message.task.getReferencedAttribute());
+		for(String c1 : message.dependentColumn){
+			if(!message.referencedColumn.contains(c1)){
+				LargeMessageProxy.LargeMessage completionMessage = new DependencyMiner.CompletionMessage(this.getContext().getSelf(), message.task.getReferencedAttribute(), message.task.getDependentAttribute(), false);
+				this.largeMessageProxy.tell(new LargeMessageProxy.SendMessage(completionMessage, message.getDependencyMinerLargeMessageProxy()));
+				return this;
+			}
+		}
+		LargeMessageProxy.LargeMessage completionMessage = new DependencyMiner.CompletionMessage(this.getContext().getSelf(), message.task.getReferencedAttribute(), message.task.getDependentAttribute(), true);
 		this.largeMessageProxy.tell(new LargeMessageProxy.SendMessage(completionMessage, message.getDependencyMinerLargeMessageProxy()));
-
 		return this;
 	}
 }

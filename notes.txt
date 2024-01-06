@@ -1,0 +1,4 @@
+Workers on sepperate thread pool
+batch candidates together? 
+
+rescedule tasks if worker leaves (remember which worker has which task)
